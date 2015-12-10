@@ -53,8 +53,8 @@ setup_dsl()
 	#dsl DBG_RetransmissionConfigSet $nLineAll 0 0
 
 	#Disable RETX
-	dsl G997_RetransmissionConfigSet -1 0 0 78
-	dsl G997_RetransmissionConfigSet -1 1 0 78
+	dsl G997_RetransmissionConfigSet $nLineAll 0 0 78
+	dsl G997_RetransmissionConfigSet $nLineAll 1 0 78
 
 
 	# dsl MiscFeatureConfigSet $nLineAll 36 0
@@ -68,7 +68,7 @@ setup_dsl()
 
 	dsl PM_Reset $nLineAll 2
 	dsl TR1CounterInhibitingSet 1
-	dsl LineActivate -1
+	dsl LineActivate $nLineAll
 }
 
 setup_dsl
