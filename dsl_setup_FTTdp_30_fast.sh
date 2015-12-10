@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# Description: DSL Line configurations for VDSL2 Profile 30a Fast mode
+# Usage: Provide this file's location as an absolute path for the config_script parameter in /etc/config/fttdp file
+# Outcome: On system startup, all the VDSL2 lines are configured with profile 30a
+
 bindir=/opt/lantiq/bin
 nLineAll=-1
 
