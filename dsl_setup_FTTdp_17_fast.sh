@@ -7,6 +7,9 @@
 bindir=/opt/lantiq/bin
 nLineAll=-1
 
+#######################################
+# Alias for actual command utility for setup function to look clean and clear
+#######################################
 dsl()
 {
 	local cmd=$@
@@ -14,6 +17,9 @@ dsl()
 	${bindir}/dsl_pipe $cmd
 }
 
+#######################################
+# Configure VDSL2 Profile 17a Fast mode
+#######################################
 setup_dsl()
 {
 	echo "Configure DSL modes 17A fast mode"
