@@ -1343,10 +1343,12 @@ typedef enum {
 
 DSL_LOCAL DSL_Error_t DSL_AVX_HandleChangeEthPptpUni
 (
+   DSL_Context_t *pContext,
    const DSL_uint16_t nLine, 
    const DSL_PPTP_ETH_UNI_State_t nState
 );
 //Ani
+
 #endif /* #if (INCLUDE_DSL_API_VDSL_SUPPORT == 1) */
    
 /***************************************************************
@@ -3141,8 +3143,8 @@ DSL_Error_t DSL_AVX_OnModemFsmStateGet(
          CHECK_LINE_STATE(DSL_LINESTATUS_EXCEPTION);
 
          DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: FAIL" DSL_CRLF , nLine));
-
-         if (DSL_SUCCESS != DSL_AVX_HandleChangeEthPptpUni(nLine, PPTP_ETH_UNI_DOWN))
+//Ani
+         if (DSL_SUCCESS != DSL_AVX_HandleChangeEthPptpUni(pContext, nLine, DSL_PPTP_ETH_UNI_DOWN))
          {
              DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: Error in updating PPTP UNI" DSL_CRLF , nLine));
          }
@@ -3389,8 +3391,8 @@ DSL_Error_t DSL_AVX_OnModemFsmStateGet(
          (nActLineState == DSL_LINESTATUS_FULL_INIT))
       {
          CHECK_LINE_STATE(DSL_LINESTATUS_SHOWTIME_TC_SYNC);
-
-         if (DSL_SUCCESS != DSL_AVX_HandleChangeEthPptpUni(nLine, PPTP_ETH_UNI_UP))
+//Ani
+         if (DSL_SUCCESS != DSL_AVX_HandleChangeEthPptpUni(pContext, nLine, DSL_PPTP_ETH_UNI_UP))
          {
              DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: Error in updating PPTP UNI" DSL_CRLF , nLine));
          }
@@ -19965,6 +19967,7 @@ DSL_LOCAL DSL_Error_t DSL_AVX_VdslRestore
 //Ani
 DSL_LOCAL DSL_Error_t DSL_AVX_HandleChangeEthPptpUni
 (
+   DSL_Context_t *pContext,
    const DSL_uint16_t nLine, 
    const DSL_PPTP_ETH_UNI_State_t nState
 )
@@ -19976,14 +19979,14 @@ DSL_LOCAL DSL_Error_t DSL_AVX_HandleChangeEthPptpUni
    {
       case DSL_PPTP_ETH_UNI_UP:
         //Clear the PPTP Eth UNI Alarm 
-        system(/opt/lantiq/bin/omci_pipe.sh managed_entity_alarm_set 11 257 0 0);
+        system("/opt/lantiq/bin/omci_pipe.sh managed_entity_alarm_set 11 257 0 0");
         //Mark the Operational state of the ME as Enabled
         //system(/opt/lantiq/bin/omci_pipe.sh managed_entity_attr_data_set 11 257 6 0);
         break;
 
       case DSL_PPTP_ETH_UNI_DOWN:
         //Raise the PPTP Eth UNI Alarm 
-        system(/opt/lantiq/bin/omci_pipe.sh managed_entity_alarm_set 11 257 0 1);
+        system("/opt/lantiq/bin/omci_pipe.sh managed_entity_alarm_set 11 257 0 1");
         //Mark the Operational state of the ME as Disabled
         break;
 
