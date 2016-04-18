@@ -59,11 +59,18 @@ print (n)
 print (n.remove(11))
 print (n)
 
-choice = raw_input('Enjoying the course? (y/n)')
+choice = input('Enjoying the course? (y/n)')
 
 while choice != 'y' and choice != 'n':  # Fill in the condition (before the colon)
-    choice = raw_input("Sorry, I didn't catch that. Enter again: ")
+    choice = input("Sorry, I didn't catch that. Enter again: ")
 
+hobbies = []
+
+# Add your code below!
+for i in range(3):
+    hobbies.append(input("Tell your hobby: "))
+    
+print (hobbies)
 
 
 
