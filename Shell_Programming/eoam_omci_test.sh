@@ -1,4 +1,4 @@
-#!/bin/sh
+ and dnMHF#!/bin/sh
 ###################################################################
 # Script to set up the OMCI messages for E-OAM functionality.
 # usage: $0 <test_case_num>
@@ -235,11 +235,17 @@ create_ma_me () {
 	MDInstance=$(printf "00 %.2d" $5)
 	MAName1=' '
 	MAName2=' '
-	MHF_CREATION='01'
 	SenderIdPerm='01'
 	CCMTx='00'
 
 	determine_vlan $6
+
+	# NBN level MAs will not be MIPs
+	if [ $MDLevel -eq $NBN_MD_LEVEL ]; then
+		MHF_CREATION='01'
+	else
+		MHF_CREATION=$(printf "%.2d" $7)
+	fi
 
 	case "$MANameFmt" in
 		02)
@@ -299,7 +305,6 @@ create_ma_me () {
 
 	# Set MHF Creation for AS MA only
 	if [ $MDLevel -eq $AS_MD_LEVEL ]; then
-		MHF_CREATION=$(printf "%.2d" $7)
 		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 02 00 $MHF_CREATION\n" $tx_id)
 		increment_txid
 		show $omci_msg
@@ -903,6 +908,105 @@ execute () {
 			update_ma_me $test_case_num 1 6 -1 -1 -1 -1
 			;;
 		
+		33)
+			##############################
+			# TC: Create 2 MD, 2 MA in NBN and AS levels respectively
+			# MD for AS level has MHF creation = 1 (None) and MA for AS level has MHF creation = 1 (None)
+			# Result: No upMHF and dnMHF created @ AS level
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 1
+
+			# Create MA MEs - 1 NBN and 1 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 1
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 1
+		:1
+	;;
+	
+		34)
+			##############################
+			# TC: Create 2 MD, 2 MA in NBN and AS levels respectively
+			# MD for AS level has MHF creation = 1 (None) and 
+			# MA for AS level has MHF creation = 2 (Default)
+			# Result: No upMHF and dnMHF created @ AS level
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 2
+
+			# Create MA MEs - 1 NBN and 1 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 1
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 1
+			;;
+		
+		35)
+			##############################
+			# TC: Create 2 MD, 2 MA in NBN and AS levels respectively
+			# MD for AS level has MHF creation = 2 (Default) and 
+			# MA for AS level has MHF creation = 1 (None)
+			# Result: No upMHF and dnMHF created @ AS level
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 2
+
+			# Create MA MEs - 1 NBN and 1 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 1
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 1
+			;;
+		
+		36)
+			##############################
+			# TC: Create 2 MD, 2 MA in NBN and AS levels respectively
+			# MD for AS level has MHF creation = 1 (None) and 
+			# MA for AS level has MHF creation = 4 (Defer - use parent MD MHF flag value)
+			# Result: No upMHF and dnMHF created @ AS level
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 1
+
+			# Create MA MEs - 1 NBN and 1 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 1
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 4
+			;;
+
+		37)
+			##############################
+			# TC: Create 2 MD, 2 MA in NBN and AS levels respectively
+			# MD for AS level has MHF creation = 2 (Default) and 
+			# MA for AS level has MHF creation = 4 (Defer - use parent MD MHF flag value)
+			# Result: upMHF and dnMHF created @ AS level
+			# Dont set the uci value for MIP LTR prio. Send LBM msgs with prio 0 to the AS MIP
+			# Result: AS MIP setup and the LTR has prio 7 (default value)
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 2
+
+			# Create MA MEs - 1 NBN and 1 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 1
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 4
+			;;
+
+		38)
+			##############################
+			# TC: Set the uci value for MIP LTR prio to 5. Create 2 MD, 2 MA in NBN and AS levels.
+			# MD for AS level has MHF creation = 2 (Default) and 
+			# MA for AS level has MHF creation = 2 (Default)
+			# Send LBM msgs with prio 0 to the AS MIP
+			# Result: AS MIP setup and the LTR has prio 5
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 2
+
+			# Create MA MEs - 1 NBN and 1 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 1
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 2
+			;;
+	
 		*)
 			echo "Invalid test case number" $test_case_num
 			exit 1
