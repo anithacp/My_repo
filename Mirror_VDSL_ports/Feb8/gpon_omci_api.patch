@@ -1,0 +1,95 @@
+--- a/src/me/omci_api_pptp_ethernet_uni.c	2016-01-20 09:36:49.137572862 +1100
++++ b/src/me/omci_api_pptp_ethernet_uni.c	2016-02-08 14:19:48.383123833 +1100
+@@ -23,6 +23,9 @@
+ #define OMCI_API_PPTPETHUNI_PAUSETIME_DEFAULT     0xffff
+ /** Bridge or IP indication default value definition */
+ #define OMCI_API_PPTPETHUNI_BRIDGEIND_DEFAULT     0x0
++//Ani
++#define OMCI_PPTP_ETH_UNI_MIN 257
++#define OMCI_PPTP_ETH_UNI_MAX 260
+ 
+ #ifdef ONU_HGU
+ static enum omci_api_return port_loop_cfg_set (struct omci_api_ctx *ctx,
+@@ -817,6 +820,42 @@
+ }
+ 
+ enum omci_api_return
++omci_api_pptp_ethernet_uni_oper_state_set(struct omci_api_ctx *ctx,
++                                          uint16_t me_id,
++                                          uint8_t oper_state)
++{
++	enum omci_api_return ret = OMCI_API_SUCCESS;
++	uint32_t lport = 0, pport;
++	uint8_t q_idx;
++	struct gpe_enqueue_control enqueue_control;
++
++	DBG(OMCI_API_MSG, ("%s\n   me_id = %u", __FUNCTION__, me_id));
++
++	ret = index_get(ctx, MAPPER_PPTPETHUNI_MEID_TO_IDX,
++                        me_id, &lport);
++        if (ret != OMCI_API_SUCCESS)
++                return ret;
++
++	enqueue_control.enable = (oper_state == 1)? 0 : 1;
++	DBG(OMCI_API_ERR, ("%s: me_id = %u lport = %u oper_state = %d q_enable = %d\n", __FUNCTION__, me_id, lport, oper_state, enqueue_control.enable));
++
++	if ((OMCI_PPTP_ETH_UNI_MIN <= me_id) && (OMCI_PPTP_ETH_UNI_MAX >= me_id)) {
++		//Set the state for each associated queue forn that lport
++		for (q_idx = 0; q_idx < ONU_PRIO_QUEUES_PER_LPORT; q_idx++) {
++			enqueue_control.index = ONU_QUEUE_INDEX_LAN0 +
++					lport * ONU_PRIO_QUEUES_PER_LPORT + q_idx;
++
++			ret = dev_ctl(ctx->remote, ctx->onu_fd,
++				      FIO_GPE_ENQUEUE_ENABLE_SET,
++				      &enqueue_control, sizeof(enqueue_control));
++			if (ret != OMCI_API_SUCCESS)
++				break;
++		}
++	}
++	return ret;
++}
++
++enum omci_api_return
+ omci_api_pptp_ethernet_uni_oper_state_get(struct omci_api_ctx *ctx,
+ 					  uint16_t me_id,
+ 					  uint8_t *oper_state)
+@@ -824,6 +863,8 @@
+ 	enum omci_api_return ret = OMCI_API_SUCCESS;
+ 	uint32_t lport = 0, pport;
+ 	union lan_port_cfg_get_u lan_cfg;
++	union gpe_enqueue_enable_get_u enqueue_enable;
++	uint8_t q_idx;
+ 
+ 	DBG(OMCI_API_MSG, ("%s\n   me_id = %u", __FUNCTION__, me_id));
+ 
+@@ -835,7 +876,29 @@
+ 		return ret;
+ 
+ 	pport = LAN_LPORT2PPORT(lport);
+-
++//Ani
++	DBG(OMCI_API_ERR, ("%s: me_id = %u lport = %u pport = %u\n", __FUNCTION__, me_id, lport, pport));
++	if ((OMCI_PPTP_ETH_UNI_MIN <= me_id) && (OMCI_PPTP_ETH_UNI_MAX >= me_id)) {
++		for (q_idx = 0; q_idx < ONU_PRIO_QUEUES_PER_LPORT; q_idx++) {
++			enqueue_enable.in.val = ONU_QUEUE_INDEX_LAN0 +
++					lport * ONU_PRIO_QUEUES_PER_LPORT + q_idx;
++
++			ret = dev_ctl(ctx->remote, ctx->onu_fd,
++				      FIO_GPE_ENQUEUE_ENABLE_GET,
++				      &enqueue_enable, sizeof(enqueue_enable));
++			if (ret != OMCI_API_SUCCESS)
++				return ret;
++			DBG(OMCI_API_ERR, ("%s q_idx = %d State = %d for me_id = %u lport = %u pport = %u\n", __FUNCTION__, q_idx, enqueue_enable.out.enable, me_id, lport, pport));
++			//If one of the queues is enabled, mark operating state for that lport/ME as Enabled
++			if (enqueue_enable.out.enable) {
++				*oper_state = 0;
++				break;
++			}
++		}
++		DBG(OMCI_API_ERR, ("%s oper_state = %d for me_id = %u lport = %u pport = %u\n", __FUNCTION__, *oper_state, me_id, lport, pport));
++		return ret;				
++	}
++		
+ 	lan_cfg.in.pport = pport;
+ 	ret = dev_ctl(ctx->remote, ctx->onu_fd, FIO_LAN_PORT_CFG_GET,
+ 		      &lan_cfg, sizeof(union lan_port_cfg_get_u));

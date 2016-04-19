@@ -1,0 +1,105 @@
+--- a/src/Makefile.am	2015-10-13 19:45:50.000000000 +1100
++++ b/src/Makefile.am	2016-02-01 16:17:10.556285206 +1100
+@@ -11,7 +11,8 @@
+ if INCLUDE_DSL_API_LIBRARY_ONLY
+ bin_PROGRAMS =
+ else
+-bin_PROGRAMS = dsl_daemon dsl_pipe dtop
++#bin_PROGRAMS = dsl_daemon dsl_pipe dtop
++bin_PROGRAMS = dsl_pipe dtop
+ if INCLUDE_DSL_API_SOAP_SUPPORT
+ bin_PROGRAMS += dsl_daemon_soap_client 
+ endif # INCLUDE_DSL_API_SOAP_SUPPORT
+
+--- a/src/avinax/lib_dsl_avinax_ct.c	2015-10-13 19:45:51.000000000 +1100
++++ b/src/avinax/lib_dsl_avinax_ct.c	2016-02-04 13:46:45.164300835 +1100
+@@ -66,7 +66,11 @@
+ #if defined(INCLUDE_DSL_DSM) && (INCLUDE_DSL_API_VDSL_SUPPORT == 1)
+ #include "lib_dsl_dsm.h"
+ #endif /* defined(INCLUDE_DSL_DSM) */
+-
++//#include "../../../../gpon_omci_onu-7.4.2/include/omci_types.h"
++//#include "../../../../gpon_omci_onu-7.4.2/include/omci_interface.h"
++//extern struct omci_context *g_omci_ctx;
++extern void handle_pptp_uni_state_change(uint16_t instance_id,
++					  uint8_t oper_state);
+ _DSLAPI_USE
+ _DSLAPI_BEGIN
+ 
+@@ -83,6 +87,10 @@
+ #define DSL_LOCAL static
+ #endif
+ 
++const DSL_uint16_t DSL_BASE_PPTP_UNI_INST_ID = 257;
++#define DSL_PPTP_ETH_UNI_OPER_STATE_DISABLED 1
++#define DSL_PPTP_ETH_UNI_OPER_STATE_ENABLED 0
++
+ #define DSL_OHC_TESTPARAM_ID_NONE   0
+ /** Test Parameter ID for OHC requests for
+    HLog
+@@ -1675,7 +1683,6 @@
+    return DSL_SUCCESS;
+ }
+ 
+-
+ /**
+    This routine handles the messages received by the
+    AVINAX control thread.
+@@ -2822,6 +2829,33 @@
+    return (errorCode);
+ }
+ 
++//Ani
++DSL_void_t DSL_AVX_HandleDSLLineStateChange(
++   DSL_Context_t *pContext,
++   DSL_uint8_t nLine,
++   DSL_uint32_t nState)
++{
++	DSL_uint16_t nInstanceId = DSL_BASE_PPTP_UNI_INST_ID + nLine;
++	DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: ===================Inside DSL_AVX_HandleDSLLineStateChange nState = %d DSL_BASE_PPTP_UNI_INST_ID = %d nInstanceId = %d" DSL_CRLF , nLine, nState, DSL_BASE_PPTP_UNI_INST_ID, nInstanceId));	
++
++	switch (nState)
++	{
++	   case DSL_LINESTATUS_EXCEPTION:
++		DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: ===================Received DSL_LINESTATUS_EXCEPTION." DSL_CRLF , nLine));	
++		handle_pptp_uni_state_change(nInstanceId, DSL_PPTP_ETH_UNI_OPER_STATE_DISABLED);
++	   break;
++
++	   case DSL_LINESTATUS_SHOWTIME_TC_SYNC:
++		DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: ===================Received DSL_LINESTATUS_SHOWTIME_TC_SYNC." DSL_CRLF , nLine));	
++		handle_pptp_uni_state_change(nInstanceId, DSL_PPTP_ETH_UNI_OPER_STATE_ENABLED);
++	   break;
++
++	   default:
++		DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: ===================In default case of DSL_AVX_HandleDSLLineStateChange" DSL_CRLF , nLine));
++	   break;
++	}
++}
++
+ /**
+    This function handles the AVINAX firmware messages
+    \ref ACK_ModemFSM_StateGet and
+@@ -3127,6 +3161,11 @@
+          CHECK_LINE_STATE(DSL_LINESTATUS_EXCEPTION);
+ 
+          DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: FAIL" DSL_CRLF , nLine));
++         DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: Calling DSL_AVX_HandleDSLLineStateChange in Fail" DSL_CRLF , nLine));
++
++//Ani
++//Call function to change operating state to Disabled and raise LOS alarm.
++	 DSL_AVX_HandleDSLLineStateChange(pContext, nLine, DSL_LINESTATUS_EXCEPTION);
+          /* DSL_AVX_PowerSavingL3Toggle(pContext, nLine, DSL_FALSE); */
+          if (DSL_ActLineStateSetAndRecoveryTimerStart(pContext, nLine, DSL_LINESTATUS_EXCEPTION) != DSL_SUCCESS)
+             return DSL_SUCCESS;
+@@ -3369,7 +3408,11 @@
+          (nActLineState == DSL_LINESTATUS_FULL_INIT))
+       {
+          CHECK_LINE_STATE(DSL_LINESTATUS_SHOWTIME_TC_SYNC);
++      DSL_DEBUG(DSL_DBG_WRN, (pContext, "DSL[%02d]: Calling DSL_AVX_HandleDSLLineStateChange in Showtime" DSL_CRLF , nLine));
+ 
++//Ani
++//Call function to change operating state to Enabled and clear LOS alarm.
++	DSL_AVX_HandleDSLLineStateChange(pContext, nLine, DSL_LINESTATUS_SHOWTIME_TC_SYNC);
+          /* the statechange has to be stored in any case,
+             because it is used internally */
+          if (DSL_ActLineStateSetAndRecoveryTimerStart(pContext, nLine, DSL_LINESTATUS_SHOWTIME_TC_SYNC) != DSL_SUCCESS)

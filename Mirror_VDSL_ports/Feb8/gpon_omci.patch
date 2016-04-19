@@ -1,0 +1,196 @@
+--- a/include/omci_interface.h	2015-11-19 21:40:08.000000000 +1100
++++ b/include/omci_interface.h	2016-02-01 14:30:00.312387616 +1100
+@@ -259,6 +259,10 @@
+ 			      const size_t len);
+ #endif
+ 
++//Ani
++void handle_pptp_uni_state_change(uint16_t instance_id,
++				  uint8_t oper_state);
++
+ /** Set Managed Entity alarm
+ 
+    \param[in] context     OMCI context pointer
+--- a/src/daemon/omci_daemon.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/daemon/omci_daemon.c	2016-02-01 14:30:00.316387616 +1100
+@@ -64,6 +64,8 @@
+ 
+ struct daemon_config daemon_config;
+ struct omci_config omci_config;
++struct omci_context *g_omci_ctx;
++
+ 
+ /** Help */
+ static const char *help =
+@@ -649,6 +651,9 @@
+ 	}
+ 
+ 	omci_printf (OMCID "OMCI daemon initialized (v" PACKAGE_VERSION omci_extra_ver_str ")\n");
++
++	g_omci_ctx = context;
++
+ #ifdef INCLUDE_CLI_SUPPORT
+ 	ret = cli_start((void*)context, daemon_config.start_console);
+ 	if (ret != OMCI_SUCCESS)
+
+--- a/src/omci_interface.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/omci_interface.c	2016-02-04 15:22:35.164209258 +1100
+@@ -42,6 +42,8 @@
+ #  include "omci_api_usock.h"
+ #endif
+ 
++extern struct omci_context *g_omci_ctx;
++
+ /** \addtogroup OMCI_API
+    @{
+ */
+@@ -215,6 +217,71 @@
+ 
+ 	me_unlock(context, me);
+ 	mib_unlock(context);
++
++	return;
++
++unlock_me:
++	me_unlock(context, me);
++
++unlock_mib:
++	mib_unlock(context);
++}
++
++//Ani
++void handle_pptp_uni_state_change(uint16_t instance_id,
++				  uint8_t oper_state)
++{
++	struct me *me;
++	enum omci_error error;
++	struct omci_context *context = g_omci_ctx;
++	bool alarm_state = (oper_state == OMCI_OPERATIONAL_STATE_ENABLED)? false : true;
++	dbg_err("===========handle_pptp_uni_state_change(): %d, %d, %d", instance_id, oper_state, alarm_state);
++//	dbg_in(__func__, "%d, %d, %d", instance_id, oper_state, alarm_state);
++
++	assert(context);
++
++	mib_lock_read(context);
++
++	error = mib_me_find(context,
++			    OMCI_ME_PPTP_ETHERNET_UNI,
++			    instance_id,
++			    &me);
++	if (error) {
++		dbg_err("ERROR(%d): "
++			"Can't update state change for PPTP Ethernet UNI 0x%04x; "
++			"ME not found", error, instance_id);
++		goto unlock_mib;
++	}
++
++	me_lock(context, me);
++	dbg_err("===========handle_pptp_uni_state_change(): Found PPTP UNI ME %d successfully", instance_id);
++
++	error = me_attr_write(context,
++			      me,
++			      omci_me_pptp_ethernet_uni_oper_state,
++			      &oper_state,
++			      sizeof(oper_state),
++			      false);
++	if (error) {
++		dbg_err("ERROR(%d): "
++			"Can't update state change for PPTP Ethernet UNI 0x%04x; "
++			"operating state update failed", error, instance_id);
++		goto unlock_me;
++	}
++
++	dbg_err("===========handle_pptp_uni_state_change(): Oper state %d updated for PPTP UNI ME %d successfully", oper_state, instance_id);
++	error = me_alarm_set(context, me,
++			     omci_me_pptp_ethernet_uni_alarm_lan_los, alarm_state);
++	if (error) {
++		dbg_err("ERROR(%d): "
++			"Can't update state change for PPTP Ethernet UNI 0x%04x; "
++			"alarm state update failed", error, instance_id);
++		goto unlock_me;
++	}
++	dbg_err("===========handle_pptp_uni_state_change(): Alarm state %d updated for PPTP UNI ME %d successfully", alarm_state, instance_id);
++
++	me_unlock(context, me);
++	mib_unlock(context);
+ 
+ 	return;
+ 
+--- a/src/me/omci_pptp_ethernet_uni.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/me/omci_pptp_ethernet_uni.c	2016-02-05 14:26:33.918886753 +1100
+@@ -25,19 +25,47 @@
+ /** \addtogroup OMCI_ME_PPTP_ETHERNET_UNI
+    @{
+ */
++//Ani
++#if 0
++enum omci_error fttdp_oper_state_get(struct omci_context *context,
++                                      struct me *me, void *oper_state)
++{
++	enum omci_error error;
++
++	assert(context);
++	assert(me);
++	assert(oper_state);
++	
++        me_lock(context, me);
++        me_dbg_err(me,"===========fttdp_oper_state_get(): Entering for PPTP UNI ME %d", me->instance_id);
++
++	error = me_attr_read(context, me, omci_me_pptp_ethernet_uni_oper_state, oper_state, 1);
++        if (error) {
++                me_dbg_err(me,"ERROR(%d): =======fttdp_oper_state_get(): Cant get operating state for PPTP Eth UNI ME Id %d", error, me->instance_id);
++        } else {
++                me_dbg_err(me,"=======fttdp_oper_state_get(): Successfully got operating state for PPTP Eth UNI ME Id %d", me->instance_id);
++	}
+ 
++        me_unlock(context, me);
++        return error;
++}
++#endif
+ static enum omci_error oper_state_get(struct omci_context *context,
+ 				      struct me *me, void *data,
+ 				      size_t data_size)
+ {
+-	enum omci_api_return ret;
++	enum omci_error error = OMCI_SUCCESS;
+ 	uint8_t oper_state = 0;
+ 
++	assert(context);
++	assert(me);
+ 	assert(data_size == 1);
+ 
+ 	memset(data, 0, data_size);
+-
+-	ret = omci_api_pptp_ethernet_uni_oper_state_get(context->api,
++	me_dbg_err(me,"===========oper_state_get(): Entering for PPTP UNI ME %d", me->instance_id);
++	
++//#ifndef ONU_FTTDP
++	enum omci_api_return ret = omci_api_pptp_ethernet_uni_oper_state_get(context->api,
+ 							me->instance_id,
+ 							&oper_state);
+ 	if (ret != OMCI_API_SUCCESS) {
+@@ -45,9 +73,22 @@
+ 		return OMCI_ERROR_DRV;
+ 	}
+ 
++//#else
++#if 0
++	me_dbg_err(me,"===========oper_state_get(): Entering for PPTP UNI ME %d", me->instance_id);
++	//me_lock(context, me);
++	error = me_attr_read(context, me, omci_me_pptp_ethernet_uni_oper_state, &oper_state, sizeof(oper_state));
++	me_dbg_err(me,"===========oper_state_get(): After me_attr_read for PPTP UNI ME %d ret val = %d", me->instance_id, error);
++	if (error) {
++		me_dbg_err(me,"ERROR(%d): =======fttdp_oper_state_get(): Cant get operating state for PPTP Eth UNI ME Id %d", error, me->instance_id);
++	}
++	//me_unlock(context, me);
++	me_dbg_err(me,"=======oper_state_get(): Successfully got operating state %d for PPTP Eth UNI ME Id %d", oper_state, me->instance_id);
++	//error = fttdp_oper_state_get(context, me, &oper_state);
++#endif /* #ifndef ONU_FTTDP */
++	me_dbg_err(me,"=======oper_state_get(): Successfully got operating state %d for PPTP Eth UNI ME Id %d", oper_state, me->instance_id);
+ 	memcpy(data, &oper_state, data_size);
+-
+-	return OMCI_SUCCESS;
++	return error;
+ }
+ 
+ static enum omci_error sensed_type_get(struct omci_context *context,

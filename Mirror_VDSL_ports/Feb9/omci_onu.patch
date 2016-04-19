@@ -1,0 +1,242 @@
+--- a/include/omci_interface.h	2015-11-19 21:40:08.000000000 +1100
++++ b/include/omci_interface.h	2016-02-09 10:43:31.705954467 +1100
+@@ -259,6 +259,23 @@
+ 			      const size_t len);
+ #endif
+ 
++#if 0
++/** Netcomm: Reflect change in the DSL line status in the PPTP Ethernet UNI ME
++    FAIL -> SHOWTIME: Operating State changed to Enabled (0)
++                      Loss of Signal (LOS) Alarm cleared
++
++    SHOWTIME -> FAIL: Operating State changed to Disabled (1)
++                      Loss of Signal (LOS) Alarm raised
++
++   \param[in] instance_id PPTP Ethernet UNI ME instance identifier
++   \param[in] oper_state  Operating State:
++                          - 1 - Disabled
++                          - 0 - Enabled
++*/
++void handle_pptp_uni_state_change(uint16_t instance_id,
++				  uint8_t oper_state);
++#endif
++
+ /** Set Managed Entity alarm
+ 
+    \param[in] context     OMCI context pointer
+--- a/src/omci_interface.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/omci_interface.c	2016-02-09 10:40:23.109957471 +1100
+@@ -42,6 +42,11 @@
+ #  include "omci_api_usock.h"
+ #endif
+ 
++#if 0
++/* Netcomm: To access the omci_context struct from DSL side */
++extern struct omci_context *g_omci_ctx;
++#endif
++
+ /** \addtogroup OMCI_API
+    @{
+ */
+@@ -224,7 +229,63 @@
+ unlock_mib:
+ 	mib_unlock(context);
+ }
++#if 0
++void handle_pptp_uni_state_change(uint16_t instance_id,
++                                  uint8_t oper_state)
++{
++        struct me *me;
++        enum omci_error error;
++        struct omci_context *context = g_omci_ctx;
++        bool alarm_state = (oper_state == OMCI_OPERATIONAL_STATE_ENABLED)? false : true;
++        dbg_err("===========handle_pptp_uni_state_change(): %d, %d, %d", instance_id, oper_state, alarm_state);
++        dbg_in(__func__, "%d, %d, %d", instance_id, oper_state, alarm_state);
++
++        assert(context);
++
++        mib_lock_read(context);
++
++        error = mib_me_find(context,
++                            OMCI_ME_PPTP_ETHERNET_UNI,
++                            instance_id,
++                            &me);
++        if (error) {
++                dbg_err("ERROR(%d): "
++                        "Can't update state change for PPTP Ethernet UNI 0x%04x; "
++                        "ME not found", error, instance_id);
++                goto unlock_mib;
++        }
++
++        me_lock(context, me);
++        dbg_err("===========handle_pptp_uni_state_change(): Found PPTP UNI ME %d successfully", instance_id);
++
++        if (OMCI_API_SUCCESS != omci_api_pptp_ethernet_uni_oper_state_set(context->api, instance_id, oper_state)) {
++                dbg_err("ERROR(%d): Can't update state change for PPTP Ethernet UNI 0x%04x; operating state update failed", error, instance_id);
++                goto unlock_me;
++        }
++        dbg_err("===========handle_pptp_uni_state_change(): Oper state %d updated for PPTP UNI ME %d successfully", oper_state, instance_id);
++
++        error = me_alarm_set(context, me,
++                             omci_me_pptp_ethernet_uni_alarm_lan_los, alarm_state);
++        if (error) {
++                dbg_err("ERROR(%d): "
++                        "Can't update state change for PPTP Ethernet UNI 0x%04x; "
++                        "alarm state update failed", error, instance_id);
++                goto unlock_me;
++        }
++        dbg_err("===========handle_pptp_uni_state_change(): Alarm state %d updated for PPTP UNI ME %d successfully", alarm_state, instance_id);
++
++        me_unlock(context, me);
++        mib_unlock(context);
+ 
++        return;
++
++unlock_me:
++        me_unlock(context, me);
++
++unlock_mib:
++        mib_unlock(context);
++}
++#endif
+ static void loop_detect_cb(struct omci_context *context,
+ 			   uint16_t instance_id)
+ {
+--- a/src/daemon/omci_daemon.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/daemon/omci_daemon.c	2016-02-09 09:26:44.362027845 +1100
+@@ -65,6 +65,10 @@
+ struct daemon_config daemon_config;
+ struct omci_config omci_config;
+ 
++/* Netcomm: Global OMCI context made accessible to DSL side */
++struct omci_context *g_omci_ctx;
++
++
+ /** Help */
+ static const char *help =
+ 	"\nOptions:"
+@@ -649,6 +653,10 @@
+ 	}
+ 
+ 	omci_printf (OMCID "OMCI daemon initialized (v" PACKAGE_VERSION omci_extra_ver_str ")\n");
++
++	/* Netcomm: Assign the initialized OMCI context to the global variable for access to DSL side */
++	g_omci_ctx = context;
++
+ #ifdef INCLUDE_CLI_SUPPORT
+ 	ret = cli_start((void*)context, daemon_config.start_console);
+ 	if (ret != OMCI_SUCCESS)
+--- a/include/me/omci_pptp_ethernet_uni.h	2015-11-19 21:40:08.000000000 +1100
++++ b/include/me/omci_pptp_ethernet_uni.h	2016-02-09 10:43:23.385954599 +1100
+@@ -351,6 +351,21 @@
+ 	omci_me_pptp_ethernet_uni_alarm_lan_los = 0
+ };
+ 
++/** Netcomm: Reflect change in the DSL line status in the PPTP Ethernet UNI ME
++    FAIL -> SHOWTIME: Operating State changed to Enabled (0)
++                      Loss of Signal (LOS) Alarm cleared
++
++    SHOWTIME -> FAIL: Operating State changed to Disabled (1)
++                      Loss of Signal (LOS) Alarm raised
++
++   \param[in] instance_id PPTP Ethernet UNI ME instance identifier
++   \param[in] oper_state  Operating State:
++                          - 1 - Disabled
++                          - 0 - Enabled
++*/
++void handle_pptp_uni_state_change(uint16_t instance_id,
++                                  uint8_t oper_state);
++
+ /** @} */
+ 
+ /** @} */
+
+--- a/src/me/omci_pptp_ethernet_uni.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/me/omci_pptp_ethernet_uni.c	2016-02-09 10:49:56.453948339 +1100
+@@ -22,10 +22,69 @@
+ #include "me/omci_uni_g.h"
+ #include "me/omci_circuit_pack.h"
+ 
++/* Netcomm: To access the omci_context struct from DSL side */
++extern struct omci_context *g_omci_ctx;
++
+ /** \addtogroup OMCI_ME_PPTP_ETHERNET_UNI
+    @{
+ */
+ 
++void handle_pptp_uni_state_change(uint16_t instance_id,
++                                  uint8_t oper_state)
++{
++        struct me *me;
++        enum omci_error error;
++        struct omci_context *context = g_omci_ctx;
++        bool alarm_state = (oper_state == OMCI_OPERATIONAL_STATE_ENABLED)? false : true;
++        dbg_err("===========handle_pptp_uni_state_change(): %d, %d, %d", instance_id, oper_state, alarm_state);
++        dbg_in(__func__, "%d, %d, %d", instance_id, oper_state, alarm_state);
++
++        assert(context);
++
++        mib_lock_read(context);
++
++        error = mib_me_find(context,
++                            OMCI_ME_PPTP_ETHERNET_UNI,
++                            instance_id,
++                            &me);
++        if (error) {
++                dbg_err("ERROR(%d): "
++                        "Can't update state change for PPTP Ethernet UNI 0x%04x; "
++                        "ME not found", error, instance_id);
++                goto unlock_mib;
++        }
++
++        me_lock(context, me);
++        dbg_err("===========handle_pptp_uni_state_change(): Found PPTP UNI ME %d successfully", instance_id);
++
++        if (OMCI_API_SUCCESS != omci_api_pptp_ethernet_uni_oper_state_set(context->api, instance_id, oper_state)) {
++                dbg_err("ERROR(%d): Can't update state change for PPTP Ethernet UNI 0x%04x; operating state update failed", error, instance_id);
++                goto unlock_me;
++        }
++        dbg_err("===========handle_pptp_uni_state_change(): Oper state %d updated for PPTP UNI ME %d successfully", oper_state, instance_id);
++
++        error = me_alarm_set(context, me,
++                             omci_me_pptp_ethernet_uni_alarm_lan_los, alarm_state);
++        if (error) {
++                dbg_err("ERROR(%d): "
++                        "Can't update state change for PPTP Ethernet UNI 0x%04x; "
++                        "alarm state update failed", error, instance_id);
++                goto unlock_me;
++        }
++        dbg_err("===========handle_pptp_uni_state_change(): Alarm state %d updated for PPTP UNI ME %d successfully", alarm_state, instance_id);
++
++        me_unlock(context, me);
++        mib_unlock(context);
++
++        return;
++
++unlock_me:
++        me_unlock(context, me);
++
++unlock_mib:
++        mib_unlock(context);
++}
++
+ static enum omci_error oper_state_get(struct omci_context *context,
+ 				      struct me *me, void *data,
+ 				      size_t data_size)
+@@ -36,7 +95,7 @@
+ 	assert(data_size == 1);
+ 
+ 	memset(data, 0, data_size);
+-
++	
+ 	ret = omci_api_pptp_ethernet_uni_oper_state_get(context->api,
+ 							me->instance_id,
+ 							&oper_state);
+@@ -46,7 +105,6 @@
+ 	}
+ 
+ 	memcpy(data, &oper_state, data_size);
+-
+ 	return OMCI_SUCCESS;
+ }
+ 

@@ -1,0 +1,103 @@
+--- a/src/omci_interface.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/omci_interface.c	2016-02-01 13:26:07.620448657 +1100
+@@ -225,6 +225,64 @@
+ 	mib_unlock(context);
+ }
+ 
++//Ani
++void handle_pptp_uni_state_change(struct omci_context *context,
++			  uint16_t instance_id,
++			  bool alarm_state,
++			  uint8_t oper_state)
++{
++	struct me *me;
++	enum omci_error error;
++
++	mib_lock_read(context);
++
++	error = mib_me_find(context,
++			    OMCI_ME_PPTP_ETHERNET_UNI,
++			    instance_id,
++			    &me);
++	if (error) {
++		dbg_err("ERROR(%d): "
++			"Can't update state change for PPTP Ethernet UNI 0x%04x; "
++			"ME not found", error, instance_id);
++		goto unlock_mib;
++	}
++
++	me_lock(context, me);
++
++	error = me_attr_write(context,
++			      me,
++			      omci_me_pptp_ethernet_uni_oper_state,
++			      &oper_state,
++			      sizeof(oper_state),
++			      false);
++	if (error) {
++		dbg_err("ERROR(%d): "
++			"Can't update state change for PPTP Ethernet UNI 0x%04x; "
++			"operating state update failed", error, instance_id);
++		goto unlock_me;
++	}
++
++	error = me_alarm_set(context, me,
++			     omci_me_pptp_ethernet_uni_alarm_lan_los, alarm_state);
++	if (error) {
++		dbg_err("ERROR(%d): "
++			"Can't update state change for PPTP Ethernet UNI 0x%04x; "
++			"alarm state update failed", error, instance_id);
++		goto unlock_me;
++	}
++
++	me_unlock(context, me);
++	mib_unlock(context);
++
++	return;
++
++unlock_me:
++	me_unlock(context, me);
++
++unlock_mib:
++	mib_unlock(context);
++}
++
+ static void loop_detect_cb(struct omci_context *context,
+ 			   uint16_t instance_id)
+ {
+--- a/include/omci_interface.h	2015-11-19 21:40:08.000000000 +1100
++++ b/include/omci_interface.h	2016-02-01 13:25:28.856449274 +1100
+@@ -259,6 +259,12 @@
+ 			      const size_t len);
+ #endif
+ 
++//Ani
++void handle_pptp_uni_state_change(struct omci_context *context,
++                          uint16_t instance_id,
++                          bool alarm_state,
++                          uint8_t oper_state);
++
+ /** Set Managed Entity alarm
+ 
+    \param[in] context     OMCI context pointer
+--- a/src/daemon/omci_daemon.c	2015-11-19 21:40:08.000000000 +1100
++++ b/src/daemon/omci_daemon.c	2016-02-01 12:24:36.144507449 +1100
+@@ -64,6 +64,8 @@
+ 
+ struct daemon_config daemon_config;
+ struct omci_config omci_config;
++struct omci_context *g_omci_ctx;
++
+ 
+ /** Help */
+ static const char *help =
+@@ -649,6 +651,9 @@
+ 	}
+ 
+ 	omci_printf (OMCID "OMCI daemon initialized (v" PACKAGE_VERSION omci_extra_ver_str ")\n");
++
++	g_omci_ctx = context;
++
+ #ifdef INCLUDE_CLI_SUPPORT
+ 	ret = cli_start((void*)context, daemon_config.start_console);
+ 	if (ret != OMCI_SUCCESS)

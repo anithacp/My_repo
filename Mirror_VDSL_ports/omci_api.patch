@@ -1,0 +1,70 @@
+--- a/include/me/omci_api_pptp_ethernet_uni.h	2015-11-26 02:15:39.000000000 +1100
++++ b/include/me/omci_api_pptp_ethernet_uni.h	2016-01-25 13:30:54.874076346 +1100
+@@ -206,6 +206,16 @@
+ 					  uint16_t me_id,
+ 					  uint8_t *oper_state);
+ 
++/** Set current Operational State
++
++   \param[in]  ctx            OMCI API context pointer
++   \param[in]  me_id          Managed Entity identifier
++   \param[in] oper_state     Operational State
++*/
++enum omci_api_return
++omci_api_pptp_ethernet_uni_oper_state_set(struct omci_api_ctx *ctx,
++					  uint16_t me_id,
++					  uint8_t oper_state);
+ /** Retrieve current Sensed Type
+ 
+    \param[in]  ctx            OMCI API context pointer
+
+--- a/src/me/omci_api_pptp_ethernet_uni.c	2016-01-20 09:36:49.137572862 +1100
++++ b/src/me/omci_api_pptp_ethernet_uni.c	2016-01-25 13:51:01.434057129 +1100
+@@ -855,6 +855,47 @@
+ }
+ 
+ enum omci_api_return
++omci_api_pptp_ethernet_uni_oper_state_set(struct omci_api_ctx *ctx,
++					  uint16_t me_id,
++					  uint8_t oper_state)
++{
++	enum omci_api_return ret = OMCI_API_SUCCESS;
++	uint32_t lport = 0, pport;
++	union lan_port_cfg_get_u lan_cfg;
++	struct lan_port_cfg lan_cfg;
++
++	DBG(OMCI_API_MSG, ("%s\n   me_id = %u oper_state = %u", __FUNCTION__, me_id, oper_state));
++
++	ret = index_get(ctx, MAPPER_PPTPETHUNI_MEID_TO_IDX,
++			me_id, &lport);
++	if (ret != OMCI_API_SUCCESS)
++		return ret;
++
++	pport = LAN_LPORT2PPORT(lport);
++	lan_cfg_old.in.pport = pport;
++	ret = dev_ctl(ctx->remote, ctx->onu_fd, FIO_LAN_PORT_CFG_GET,
++		      &lan_cfg_old, sizeof(union lan_port_cfg_get_u));
++	if (ret != OMCI_API_SUCCESS) {
++		DBG(OMCI_API_ERR, ("%s lan port cfg get error (%d)\n",
++			__FUNCTION__, lport));
++		return ret;
++	}
++
++	memcpy(&lan_cfg, &lan_cfg_old.out, sizeof(struct lan_port_cfg));
++
++	lan_cfg.mode = (oper_state == 1 ? LAN_MODE_OFF : LAN_MODE_ON);
++
++	ret = dev_ctl(ctx->remote, ctx->onu_fd, FIO_LAN_PORT_CFG_SET,
++		      &lan_cfg, sizeof(struct lan_port_cfg));
++	if (ret != OMCI_API_SUCCESS) {
++		DBG(OMCI_API_ERR, ("%s lan port cfg set error\n", __FUNCTION__));
++	}
++
++	return ret;
++	
++}
++
++enum omci_api_return
+ omci_api_pptp_ethernet_uni_sensed_type_get(struct omci_api_ctx *ctx,
+ 					   uint16_t me_id,
+ 					   uint8_t *sensed_type)
