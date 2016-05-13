@@ -1,4 +1,4 @@
- and dnMHF#!/bin/sh
+#!/bin/sh
 ###################################################################
 # Script to set up the OMCI messages for E-OAM functionality.
 # usage: $0 <test_case_num>
