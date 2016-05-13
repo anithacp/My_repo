@@ -17,3 +17,7 @@ def reverse(text):
     
 print (reverse('hello world'))
 print (reverse('@5^7%#$%^&'))
+
+fname = input("Input your First Name : ")  
+lname = input("Input your Last Name : ")  
+print ("Hello  " + reverse(lname) + " " + reverse(fname))
