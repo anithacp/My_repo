@@ -1,0 +1,883 @@
+#!/bin/sh
+###################################################################
+# Script to set up the OMCI messages for E-OAM functionality.
+# usage: $0 <test_case_num>
+# User needs to configure the VLAN Ids for the different ports below 
+# according to their OLT configuration.
+###################################################################
+
+# To be set as per the OLT configs for ports 1-4
+VLAN1=280
+VLAN2=281
+VLAN3=282
+VLAN4=283
+
+#Local variables
+cmd='/opt/lantiq/bin/omci_pipe.sh rmr'
+bitmask1=65280
+bitmask2=255
+FINAL_VLAN=''
+FINAL_VLAN1=''
+FINAL_VLAN2=''
+FINAL_VLAN3=''
+FINAL_VLAN4=''
+MD_ME_CLASS_ID='01 2b'
+MA_ME_CLASS_ID='01 2c'
+MEP_ME_CLASS_ID='01 2e'
+start_instance_num=1
+tx_id=1
+mep_id=100
+sleep_time=1
+OMCI_MSG_CREATE_ID=44
+OMCI_MSG_SET_ID=48
+OMCI_MSG_DELETE_ID=46
+OMCI_DEVICE_ID='0a'
+NBN_MD_LEVEL=6
+AS_MD_LEVEL=7
+test_case_num=$1
+
+###################################################################
+# Functions
+###################################################################
+show () {
+	echo "$@"
+}
+
+exec_cmd () {
+: '
+	"$@"
+	sleep $sleep_time
+'
+}
+
+calculate_vlan () {
+	tVLAN1=$(printf "%d" $(($1 & $bitmask1)))
+	tVLAN2=$(printf "%d" $(($tVLAN1 >> 8)))
+	tVLAN3=$(printf "%d" $(($1 & $bitmask2)))
+	final_val=$(printf "%.2x %.2x" $tVLAN2 $tVLAN3)
+	echo "$final_val"
+}
+
+create_vlan () {
+	FINAL_VLAN1=`calculate_vlan $VLAN1`
+	FINAL_VLAN2=`calculate_vlan $VLAN2`
+	FINAL_VLAN3=`calculate_vlan $VLAN3`
+	FINAL_VLAN4=`calculate_vlan $VLAN4`
+	show "Calculated VLANs is" $FINAL_VLAN1 $FINAL_VLAN2 $FINAL_VLAN3 $FINAL_VLAN4
+}
+
+increment_txid () {
+	tx_id=$((tx_id+1))
+}
+
+increment_mepid () {
+	mep_id=$((mep_id+1))
+}
+
+#$EntIns $MDLevel $MDNameFmt $MDName1 $MDName2 $MhfCreation $SenderIdPerm
+print_md_me () {
+	show "Expected MD: 299@"$1"\nMD Level: "$2"\nMD Name Format: "$3"\nMD Name1: "$4"\nMD Name 2: "$5\
+	"\nMHF Creation Flag: "$6"\nSender ID PErmission: "$7"\n"
+}
+
+#"$EntIns" "$MDInstance" "$MANameFmt" "$MAName1" "$MAName2" "$CCMTx" "$FINAL_VLAN" "$MHF_CREATION" "$SenderIdPerm"
+print_ma_me () {
+	show "Expected MA: 300@"$1"\nMD Instance: "$2"\nMA Name Format: "$3"\nMA Name1: "$4"\nMA Name2: "$5\
+	"\nCCM Interval: "$6"\nAssociated VLAN: "$7"\nMHF Creation: "$8"\nSender Id Permssion: "$9"\n"
+}
+
+#"$EntIns" "$BPCDInstance" "$L2Type" "$MAInstance" "$mep_id" "$MEP_CONTROL" "$FINAL_VLAN" "$LTRprio" "$EgressId" "$AISCtrl" "$AlarmThresh"
+print_mep_me () {
+	show "Expected MEP: 302@"$1"\nL2 Entity Ptr: "$2"\nL2 Type: "$3"\nMA Ptr: "$4"\nMEP ID: "$5\
+	"\nMEP Control: "$6"\nPrimary VLAN: "$7"\nLTM Priority: "$8"\nEgress Id: "$9"\nEth AIS Ctrl: "$10\
+	"\nFault Alarm Thresh: "$11"\n"
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+# $3 - MD Name format
+# $4 - MD level
+# $5 - MHF creation
+create_md_me () {
+
+	MDLevel=$4
+	MDNameFmt=$(printf "%.2x" $3)
+	EntIns=$(printf "00 %.2d" $2)
+	MhfCreation=$(printf "%.2d" $5)
+	MDName1=' '
+	MDName2=' '
+	SenderIdPerm='01'
+
+	if [ $MDLevel -eq $NBN_MD_LEVEL ]; then
+	case "$MDNameFmt" in
+		04)
+			MDName1='4e 42 4e 4d 44 41 42 43 44 45 46 47 48 49 00' #NBNMDABCDEFGHI
+			MDName2='30 31 32 33 34 35 36 37 38 39 00' #0123456789
+			;;
+		02)
+			MDName1='77 77 77 2e 67 6f 6f 67 6c 65 2e 63 6f 6d 00'	#www.google.com
+			MDName2='77 77 77 2e 79 61 68 6f 6f 2e 63 6f 6d 00'	#www.yahoo.com
+			;;
+
+		03)
+			#Use sample MAC
+			MDName1='aa bb cc dd ee ff 11 11 00'
+			MDName2='11 22 33 44 55 66 22 22 00'
+			;;
+		20)
+			MDName1='4e 42 4e 4d 44 41 42 43 44 45 46 47 48 49 00' #NBNMDABCDEFGHI
+			MDName2='30 31 32 33 34 35 36 37 38 39 00' #0123456789
+			;;
+
+		01)
+			;;
+
+		*)
+			echo "Error in MDNameFmt"
+			exit 1
+
+	esac
+	elif [ $MDLevel -eq $AS_MD_LEVEL ]; then
+	case "$MDNameFmt" in
+		04)
+			MDName1='41 53 4d 44 41 42 43 44 45 46 47 48 49 00' #ASMDABCDEFGHI
+			MDName2='30 31 32 33 34 35 36 37 38 39 00' #0123456789
+			;;
+		02)
+			MDName1='77 77 77 2e 67 6f 6f 67 6c 65 2e 63 6f 6d 00'	#www.google.com
+			MDName2='77 77 77 2e 79 61 68 6f 6f 2e 63 6f 6d 00'	#www.yahoo.com
+			;;
+
+		03)
+			#Use sample MAC
+			MDName1='aa bb cc dd ee ff 11 11 00'
+			MDName2='11 22 33 44 55 66 22 22 00'
+			;;
+		32)
+			MDName1='41 53 4d 44 41 42 43 44 45 46 47 48 49 00' #ASMDABCDEFGHI
+			MDName2='30 31 32 33 34 35 36 37 38 39 00' #0123456789
+			;;
+
+		01)
+			;;
+
+		*)
+			echo "Error in MDNameFmt"
+			exit 1
+
+	esac
+	else 
+		if [ $test_case_num -ne 2 ]; then
+			echo "Invalid MD Level " $MDLevel
+		fi
+	fi
+	
+	# Create the MD
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_CREATE_ID $OMCI_DEVICE_ID $MD_ME_CLASS_ID $EntIns %.2d %.2d $MhfCreation $SenderIdPerm\n" $tx_id $MDLevel $MDNameFmt)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+	
+	if [ $MDNameFmt -eq 01 -a $test_case_num -ne 3 ]; then
+		print_md_me "$EntIns" "$MDLevel" "$MDNameFmt" "$MDName1" "$MDName2" "$MhfCreation" "$SenderIdPerm"
+		return
+	fi
+
+	# Set the MD name 1
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MD_ME_CLASS_ID $EntIns 20 00 $MDName1\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+	
+	# Set the MD name 2
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MD_ME_CLASS_ID $EntIns 10 00 $MDName2\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+
+	print_md_me "$EntIns" "$MDLevel" "$MDNameFmt" "$MDName1" "$MDName2" "$MhfCreation" "$SenderIdPerm"
+}
+
+determine_vlan () {
+	if [ $1 -eq $VLAN1 ]; then
+		FINAL_VLAN=$FINAL_VLAN1
+	elif [ $1 -eq $VLAN2 ]; then
+		FINAL_VLAN=$FINAL_VLAN2
+	elif [ $1 -eq $VLAN3 ]; then
+		FINAL_VLAN=$FINAL_VLAN3
+	elif [ $1 -eq $VLAN4 ]; then
+		FINAL_VLAN=$FINAL_VLAN4
+	else
+		echo "Unknown input VLAN"
+		exit 1
+	fi
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+# $3 - MA Name format
+# $4 - MD level
+# $5 - Corresponding MD Instance
+# $6 - Associated VLAN Id
+# $7 - MHF Creation flag
+create_ma_me () {
+
+	MDLevel=$4
+	MANameFmt=$(printf "%.2d" $3)
+	EntIns=$(printf "00 %.2d" $2)
+	MDInstance=$(printf "00 %.2d" $5)
+	MAName1=' '
+	MAName2=' '
+	MHF_CREATION='01'
+	SenderIdPerm='01'
+	CCMTx='00'
+
+	determine_vlan $6
+
+	case "$MANameFmt" in
+		02)
+			# Character string
+			if [ $MDLevel -eq $NBN_MD_LEVEL ]; then
+				MAName1='4e 42 4e 4d 41 41 42 43 44 45 46 47 48 49 00' #NBNMAABCDEFGHI
+			elif [ $MDLevel -eq $AS_MD_LEVEL ]; then
+				MAName1='41 53 4d 41 41 42 43 44 45 46 47 48 49 00' #ASMAABCDEFGHI
+			else echo "Invalid MD Level " $MDLevel
+			fi
+			MAName2='30 31 32 33 34 35 36 37 38 39 00' #0123456789
+			;;
+		01)
+			# Primary VLAN ID
+			MAName1=$FINAL_VLAN
+			;;
+
+		03)
+			#2-octet integer
+			MAName1='01 01'
+			MAName2='02 02'
+			;;
+		04)
+			#7-octet VPN ID
+			MAName1=$(printf "$FINAL_VLAN 01 02 03 04 05")
+			;;
+
+		*)
+			echo "Error in MANameFmt"
+			exit 1
+
+	esac
+	
+	# Create the MA
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_CREATE_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns $MDInstance %.2d $CCMTx $MHF_CREATION $SenderIdPerm\n" $tx_id $MANameFmt)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+
+	# Set the MA name 1
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 20 00 $MAName1\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+	
+	# Set the MA name 2
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 10 00 $MAName2\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+
+	# Set VLAN Id
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 04 00 $FINAL_VLAN\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+
+	# Set MHF Creation for AS MA only
+	if [ $MDLevel -eq 7 ]; then
+		MHF_CREATION=$(printf "%.2d" $7)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 02 00 $MHF_CREATION\n" $tx_id)
+		increment_txid
+		show $omci_msg
+		exec_cmd $omci_msg
+	fi
+	
+	print_ma_me "$EntIns" "$MDInstance" "$MANameFmt" "$MAName1" "$MAName2" "$CCMTx" "$FINAL_VLAN" "$MHF_CREATION" "$SenderIdPerm"
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+# $3 - Corresponding MA Instance
+# $4 - Corresponding Bridge Port Config ME Instance
+# $5 - Associated VLAN Id
+# $6 - LTM Priority
+# $7 - MEP Control flag, used for error case only
+create_mep_me () {
+	EntIns=$(printf "00 %.2d" $2)
+	MAInstance=$(printf "00 %.2d" $3)
+	BPCDInstance=$(printf "00 %.2d" $4)
+	MEP_CONTROL=14
+	LTRprio=$(printf "%.2x" $6)
+	L2Type='00'
+	EgressId='01 02 03 04 05 06 07 08'
+	AISCtrl='01'
+	AlarmThresh='01'
+
+	determine_vlan $5
+
+	if [ $test_case_num -eq 7 -o $test_case_num -eq 8 ]; then
+		MEP_CONTROL=$(printf "%.2d" $7)
+	fi
+
+	if [ $test_case_num -eq 12 ]; then
+		L2Type='01'
+	fi
+
+	# Create the MEP
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_CREATE_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns $BPCDInstance $L2Type $MAInstance 00 %.2x $MEP_CONTROL $FINAL_VLAN $LTRprio $EgressId $AISCtrl $AlarmThresh\n" $tx_id $mep_id)
+	increment_txid
+	increment_mepid
+	show $omci_msg
+	exec_cmd $omci_msg
+	
+	print_mep_me "$EntIns" "$BPCDInstance" "$L2Type" "$MAInstance" "$mep_id" "$MEP_CONTROL" "$FINAL_VLAN" "$LTRprio" "$EgressId" "$AISCtrl" "$AlarmThresh"
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+# $3 - MD pointer
+# $4 - MA name format
+# $5 - VLAN ID
+# $6 - MHF creation
+# $7 - MA name updation flag (=-1: no update, 1: name 1 updation, 2: name 2 updation)
+# $8 - MA name value if $7 flag set to 1 or 2
+update_ma_me () {
+	EntIns=$(printf "00 %.2d" $2)
+
+	if [ $3 -ne -1 ];then
+		MDPtr=$(printf "00 %.2d" $3)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 80 00 $MDPtr\n" $tx_id)
+	fi
+	if [ $4 -ne -1 ];then
+		MANameFormat=$(printf "%.2d" $4)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 40 00 $MANameFormat\n" $tx_id)
+	fi
+	if [ $5 -ne -1 ];then
+		PrimVLAN=`calculate_vlan $5`
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 04 00 $PrimVLAN\n" $tx_id)
+	fi
+	if [ $6 -ne -1 ];then
+		MHFCreation=$(printf "%.2d" $6)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 02 00 $MHFCreation\n" $tx_id)
+	fi
+	if [ $7 -eq 1 ];then
+		newMAName1="$8"
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 20 00 $newMAName1\n" $tx_id)
+	fi
+	if [ $7 -eq 2 ];then
+		newMAName2="$8"
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns 10 00 $newMAName2\n" $tx_id)
+	fi
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+}
+
+#$test_case_num 1 -1 -1 -1 -1 10 -1 -1
+# $1 - test_case_id
+# $2 - ME instance id
+# $3 - Corresponding Bridge Port Config ME Instance
+# $4 - L2 type
+# $5 - Corresponding MA Instance
+# $6 - MEP ID
+# $7 - MEP Control flag, used for error case only
+# $8 - Primary VLAN Id
+# $9 - LTM Priority
+update_mep_me () {
+	EntIns=$(printf "00 %.2d" $2)
+	
+	if [ $3 -ne -1 ];then
+		BPCDInstance=$(printf "00 %.2d" $3)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 80 00 $BPCDInstance\n" $tx_id)
+	fi
+	if [ $4 -ne -1 ];then
+		L2Type=$(printf "%.2d" $4)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 40 00 $L2Type\n" $tx_id)
+	fi
+	if [ $5 -ne -1 ];then
+		MAInstance=$(printf "00 %.2d" $5)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 20 00 $MAInstance\n" $tx_id)
+	fi
+	if [ $6 -ne -1 ];then
+		MEPId=$(printf "00 %.2d" $6)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 10 00 $MEPId\n" $tx_id)
+	fi
+	if [ $7 -ne -1 ];then
+		MEPCtrl=$(printf "%.2d" $7)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 08 00 $MEPCtrl\n" $tx_id)
+	fi
+	if [ $8 -ne -1 ];then
+		PrimVLAN=`calculate_vlan $8`
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 04 00 $PrimVLAN\n" $tx_id)
+	fi
+	if [ $9 -ne -1 ];then
+		LTMprio=$(printf "%.2d" $9)
+		omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_SET_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns 01 00 $LTMprio\n" $tx_id)
+	fi
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+delete_md_me () {
+	EntIns=$(printf "00 %.2d" $2)
+	show "Deleting MD ME for "$EntIns
+
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_DELETE_ID $OMCI_DEVICE_ID $MD_ME_CLASS_ID $EntIns\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+delete_ma_me () {
+	EntIns=$(printf "00 %.2d" $2)
+	show "Deleting MA ME for "$EntIns
+
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_DELETE_ID $OMCI_DEVICE_ID $MA_ME_CLASS_ID $EntIns\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+}
+
+# $1 - test_case_id
+# $2 - ME instance id
+delete_mep_me () {
+	EntIns=$(printf "00 %.2d" $2)
+	show "Deleting MEP ME for "$EntIns
+
+	omci_msg=$(printf "$cmd 10 %.2x $OMCI_MSG_DELETE_ID $OMCI_DEVICE_ID $MEP_ME_CLASS_ID $EntIns\n" $tx_id)
+	increment_txid
+	show $omci_msg
+	exec_cmd $omci_msg
+}
+
+cleanup () {
+	# Delete MEP MEs
+	for i in $(seq 1 4);
+	do
+		delete_mep_me $test_case_num $((i))
+	done
+
+	# Delete MA MEs
+	for i in $(seq 1 8);
+	do
+		delete_ma_me $test_case_num $((i))
+	done
+
+	# Delete MD MEs
+	for i in $(seq 1 2);
+	do
+		delete_md_me $test_case_num $((i))
+	done
+}
+
+execute () {
+	case "$test_case_num" in
+		1)
+			##############################
+			# TC: Create 2 MDs, 8 MAs, 4 MEPs
+			# Result: All MEs created successfully
+			##############################
+			# Create MD MEs - 1 NBN and 1 AS level
+			create_md_me $test_case_num 1 32 $NBN_MD_LEVEL 1
+			create_md_me $test_case_num 2 3 $AS_MD_LEVEL 1
+			#create_md_me 1 3 22 7
+			#create_md_me 1 3 4 9
+
+			# Create MA MEs - 4 NBN and 4 AS level
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_ma_me $test_case_num 2 2 $NBN_MD_LEVEL 1 $VLAN2 2
+			create_ma_me $test_case_num 3 3 $NBN_MD_LEVEL 1 $VLAN3 2
+			create_ma_me $test_case_num 4 4 $NBN_MD_LEVEL 1 $VLAN4 2
+			create_ma_me $test_case_num 5 1 $AS_MD_LEVEL 2 $VLAN1 2
+			create_ma_me $test_case_num 6 2 $AS_MD_LEVEL 2 $VLAN2 2
+			create_ma_me $test_case_num 7 3 $AS_MD_LEVEL 2 $VLAN3 2
+			create_ma_me $test_case_num 8 4 $AS_MD_LEVEL 2 $VLAN4 2
+
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			create_mep_me $test_case_num 2 2 2 $VLAN2 0
+			create_mep_me $test_case_num 3 3 3 $VLAN3 0
+			create_mep_me $test_case_num 4 4 4 $VLAN4 0
+			;;
+
+		2)
+			##############################
+			# TC: Create 1 MD with wrong MD level
+			# Result: Failure in MD creation
+			##############################
+			create_md_me $test_case_num 1 1 4 1
+			;;
+
+		3)
+			##############################
+			# TC: Create 1 MD with MD Name format as "None" and send set message for MDname
+			# Result: Failure in Set Message
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			;;
+
+		4)
+			##############################
+			# TC: Create 1 MD with MHF creation=3 (Explicit), 1 MA with MHF setting as "Defer"
+			# Result: Success. MA to use same MHF setting as parent MD
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 2
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 4
+			;;
+		5)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with incorrect BPCD ptr
+			# Result: Failure in MEP creation
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 11 $VLAN1 0
+			;;
+		
+		6)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with incorrect MA ptr
+			# Result: Failure in MEP creation
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 9 1 $VLAN1 0
+			;;
+
+		7)	
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with MEP control bit mask = 0
+			# Result: Failure in MEP creation
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0 0
+			;;
+
+		8)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with MEP control bit mask = 10 (no Y.1731)
+			# Result: MEP created. No responses to Y.1731 messages
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0 10
+			;;
+
+		9)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with LTMprio = 0
+			# Result: Send LTM with prio=5, get LTR with prio=5
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			;;
+
+		10)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with LTMprio = 4
+			# Result: Send LTM with prio=5, get LTR with prio=4
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 4
+			;;
+
+		11)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with LTMprio = 255 
+			# Result: Send LTM with prio=5, get LTR with prio=5
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 255
+			;;
+
+		12)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP with L2 type = 1
+			# Result: Failure in MEP creation
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0 0
+			;;
+
+		13)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change BPCD Pointer.
+			# Result: MEP created with initial values. MEP reset to changed value in SET
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 5 -1 -1 -1 -1 -1 -1
+			;;
+		14)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change L2 Type.
+			# Result: MEP created with initial values. MEP reset to changed value in SET
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 1 -1 -1 -1 -1 -1
+			update_mep_me $test_case_num 1 -1 0 -1 -1 -1 -1 -1
+			;;
+		15)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change MA Pointer.
+			# Result: MEP created with initial values. MEP reset to changed value in SET
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 -1 4 -1 -1 -1 -1
+			;;
+
+		16)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change MEP ID.
+			# Result: MEP created with initial values. MEP reset to changed value in SET
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 -1 -1 65 -1 -1 -1
+			;;
+
+		17)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change MEP control bit mask = 10 (no Y.1731).
+			# Result: MEP created. No responses to Y.1731 messages
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 -1 -1 -1 10 -1 -1
+			;;
+
+		18)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change Primary VLAN ID.
+			# Result: MEP created with initial values. MEP reset to changed value in SET
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 -1 -1 -1 -1 750 -1
+			;;
+
+		19)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change LTM Priority.
+			# Result: MEP created with initial values. MEP reset to changed value in SET
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 -1 -1 -1 -1 -1 6
+			;;
+
+		20)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. 
+			# Send OMCI SET message to change MEP control bit mask = 10 (no Y.1731).i
+			# Send another SET message to change MEP control bit mask = 14
+			# Result: MEP created. Receive responses to Y.1731 messages
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_mep_me $test_case_num 1 -1 -1 -1 -1 10 -1 -1
+			update_mep_me $test_case_num 1 -1 -1 -1 -1 14 -1 -1
+			;;
+
+		21)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with new MD Pointer
+			# Result: MA should be updated correctly
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 6 -1 -1 -1 -1
+			;;
+
+		22)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with new MA name format
+			# Result: MA should be updated correctly
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 2 -1 -1 -1
+			;;
+
+		23)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with new MA name 1
+			# Result: MA should be updated correctly
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 -1 -1 -1 1 '30 31 32 30 31 32 30 31 32 00'
+			;;
+		
+		24)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with new MA name 2
+			# Result: MA should be updated correctly
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 -1 -1 -1 2 '33 34 35 33 34 35 33 34 35 00'
+			;;
+
+		25)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with new VLAN ID
+			# Result: MA should be updated correctly
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 -1 1670 -1 -1
+			;;
+
+		26)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with MHFCreation = 1 (None)
+			# Result: MEP should be deleted
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 -1 -1 1 -1
+			;;
+
+		27)
+			##############################
+			# TC: Create 1 MD, 1 MA  and 1 MEP. Update MA with MHFCreation = 3 (Explicit)
+			# Result:
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 -1 -1 3 -1
+			;;
+
+		28)
+			##############################
+			# TC: Create 1 MD with MHF creation = 1 (None), 1 MA  and 1 MEP. Update MA with 
+			# MHFCreation = 4 (Defer-Use Parent MD MHF creation)
+			# Result: MEP should be deleted
+			##############################
+			create_md_me $test_case_num 1 1 $NBN_MD_LEVEL 1
+			create_ma_me $test_case_num 1 1 $NBN_MD_LEVEL 1 $VLAN1 2
+			create_mep_me $test_case_num 1 1 1 $VLAN1 0
+			update_ma_me $test_case_num 1 -1 -1 -1 4 -1
+			;;
+
+		*)
+			echo "Invalid test case number" $test_case_num
+			exit 1
+	esac
+}
+
+###################################################################
+# Main
+###################################################################
+if [ $# -ne 1 ]; then
+	echo "usage: $0 <test_case_num>"
+	echo "Test case list:"
+	echo "#####################################################################################"
+	echo "1: Create 2 MDs, 8 MAs, 4 MEPs.\n\tExpected Result: All succeeds"
+	echo "2: Create 1 MD with wrong MD level.\n\tExpected Result: MD not created"
+	echo "3: Create 1 MD with MD Name format as "None" and send set message for MDname.\
+		\n\tExpected Result: Error in handling set message"
+	echo "4. Create 1 MD, 1 MA with MHF setting as "Defer".\
+		\n\tExpected Result: MA to use same MHF setting as parent MD"
+	echo "5. Create 1 MD, 1 MA  and 1 MEP with incorrect BPCD ptr\
+		\n\tExpected Result: Failure in MEP creation"
+	echo "6. Create 1 MD, 1 MA  and 1 MEP with incorrect MA ptr\
+		\n\tExpected Result: Failure in MEP creation"
+	echo "7. Create 1 MD, 1 MA  and 1 MEP with MEP control bit mask = 0\
+		\n\tExpected Result: Failure in MEP creation"
+	echo "8. Create 1 MD, 1 MA  and 1 MEP with MEP control bit mask = 10 (no Y.1731)\
+		\n\tExpected Result: MEP created. No responses to Y.1731 messages"
+	echo "9. Create 1 MD, 1 MA  and 1 MEP with LTMprio = 0\
+		\n\tExpected Result: Send LTM with prio=5, get LTR with prio=5"
+	echo "10. Create 1 MD, 1 MA  and 1 MEP with LTMprio = 4\
+		\n\tExpected Result: Send LTM with prio=5, get LTR with prio=4"
+	echo "11. Create 1 MD, 1 MA  and 1 MEP with LTMprio = 255\
+		\n\tExpected Result: Send LTM with prio=5, get LTR with prio=5"
+	echo "12. Create 1 MD, 1 MA  and 1 MEP with L2 type = 1\
+		\n\tExpected Result: Failure in MEP creation"
+	echo "13. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change BPCD Pointer.\
+		\n\tExpected  Result: MEP created with initial values. MEP reset to changed value in SET"
+	echo "14. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change L2 Type.\
+		\n\tExpected  Result: MEP created with initial values. MEP reset to changed value in SET"
+	echo "15. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change MA Pointer.\
+		\n\tExpected  Result: MEP created with initial values. MEP reset to changed value in SET"
+	echo "16. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change MEP ID.\
+		\n\tExpected  Result: MEP created with initial values. MEP reset to changed value in SET"
+	echo "17. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change MEP control bit mask = 10(no Y.1731).\
+		\n\tExpected Result: No responses to Y.1731 messages"
+	echo "18. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change Primary VLAN ID.\
+		\n\tExpected  Result: MEP created with initial values. MEP reset to changed value in SET"
+	echo "19. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change LTM Priority.\
+		\n\tExpected  Result: MEP created with initial values. MEP reset to changed value in SET"
+	echo "20. Create 1 MD, 1 MA  and 1 MEP. Send OMCI SET message to change MEP control bit mask = 10(no Y.1731).\
+		\n\tSend another SET message to change MEP control bit mask = 14.\
+		\n\tExpected Result: Receive responses to Y.1731 messages"
+	echo "21. Create 1 MD, 1 MA  and 1 MEP. Update MA with new MD Pointer.\
+		\n\tExpected Result: MA should be updated correctly"
+	echo "22. Create 1 MD, 1 MA  and 1 MEP. Update MA with new MA name format\
+		\n\tExpected Result: MA should be updated correctly"
+	echo "23. Create 1 MD, 1 MA  and 1 MEP. Update MA with new MA name 1\
+		\n\tExpected Result: MA should be updated correctly"
+	echo "24. Create 1 MD, 1 MA  and 1 MEP. Update MA with new MA name 2\
+		\n\tExpected Result: MA should be updated correctly"
+	echo "25. Create 1 MD, 1 MA  and 1 MEP. Update MA with new VLAN ID\
+		\n\tExpected Result: MA should be updated correctly"
+	echo "26. Create 1 MD, 1 MA  and 1 MEP. Update MA with MHFCreation = 1 (None)\
+		\n\tExpected Result: MEP should be deleted"
+	echo "27. Create 1 MD, 1 MA  and 1 MEP. Update MA with MHFCreation = 3 (Explicit)\
+		\n\tExpected Result:"
+	echo "28. Create 1 MD with MHF creation = 1 (None), 1 MA  and 1 MEP. Update MA with MHFCreation = 4(Defer-Use Parent MD MHF creation)\n\tExpected Result: MEP should be deleted"
+	echo "#####################################################################################"
+	exit 1
+fi 
+
+create_vlan
+echo "#####################################################################################"
+
+cleanup
+echo "#####################################################################################"
+
+execute $1
+echo "#####################################################################################"
+

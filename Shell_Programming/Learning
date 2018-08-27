@@ -1,0 +1,132 @@
+
+
+First of all, note you are not using the variable correctly:
+
+if [ "pass_tc11" != "" ]; then
+      ^
+      missing $
+
+Anyway, to check if a variable is empty or not you can use -z --> the string is empty:
+
+if [ ! -z "$pass_tc11" ]; then
+   echo "hi"
+fi
+
+or -n --> the length is non-zero:
+
+if [ -n "$pass_tc11" ]; then
+   echo "hi"
+fi
+
+From man test:
+
+    -z STRING
+
+    the length of STRING is zero
+
+    -n STRING
+
+    the length of STRING is nonzero
+
+Samples:
+
+$ [ ! -z "$var" ] && echo "yes"
+$
+
+$ var=""
+$ [ ! -z "$var" ] && echo "yes"
+$
+
+$ var="a"
+$ [ ! -z "$var" ] && echo "yes"
+yes
+
+$ var="a"
+$ [ -n "$var" ] && echo "yes"
+yes
+
+================================================================
+How to do a logical OR operation in Shell Scripting
+
+if [ "$#" == 0 -o "$#" > 1 ] ; then
+ echo "hello"
+fi
+
+if [ "$#" == 0 ] || [ "$#" > 1 ] ; then
+ echo "hello"
+fi
+
+================================================================
+returning value from called function in shell script
+
+Here's how to do each of those options:
+1. echo strings
+
+lockdir="somedir"
+testlock(){
+    retval=""
+    if mkdir "$lockdir"
+    then # directory did not exist, but was created successfully
+         echo >&2 "successfully acquired lock: $lockdir"
+         retval="true"
+    else
+         echo >&2 "cannot acquire lock, giving up on $lockdir"
+         retval="false"
+    fi
+    echo "$retval"
+}
+
+retval=$( testlock )
+if [ "$retval" == "true" ]
+then
+     echo "directory not created"
+else
+     echo "directory already created"
+fi 
+
+2. return exit status
+
+lockdir="somedir"
+testlock(){
+    if mkdir "$lockdir"
+    then # directory did not exist, but was created successfully
+         echo >&2 "successfully acquired lock: $lockdir"
+         retval=0
+    else
+         echo >&2 "cannot acquire lock, giving up on $lockdir"
+         retval=1
+    fi
+    return "$retval"
+}
+
+testlock
+retval=$?
+if [ "$retval" == 0 ]
+then
+     echo "directory not created"
+else
+     echo "directory already created"
+fi 
+
+3. share variable
+
+lockdir="somedir"
+retval=-1
+testlock(){
+    if mkdir "$lockdir"
+    then # directory did not exist, but was created successfully
+         echo >&2 "successfully acquired lock: $lockdir"
+         retval=0
+    else
+         echo >&2 "cannot acquire lock, giving up on $lockdir"
+         retval=1
+    fi
+}
+
+testlock
+if [ "$retval" == 0 ]
+then
+     echo "directory not created"
+else
+     echo "directory already created"
+fi 

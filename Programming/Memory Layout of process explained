@@ -1,0 +1,103 @@
+anitha@anitha-All-Series ~/GIT/Programming $ vi mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ gcc -o mem_layout mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ size mem_layout
+   text	   data	    bss	    dec	    hex	filename
+   1033	    276	      4	   1313	    521	mem_layout
+anitha@anitha-All-Series ~/GIT/Programming $ cat mem_layout.c
+#include <stdio.h>
+ 
+int main(void)
+{
+    return 0;
+}
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ vi mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ cat mem_layout.c
+#include <stdio.h>
+ 
+int g_i;
+
+int main(void)
+{
+    return 0;
+}
+anitha@anitha-All-Series ~/GIT/Programming $ gcc -o mem_layout mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ size mem_layout
+   text	   data	    bss	    dec	    hex	filename
+   1033	    276	      8	   1317	    525	mem_layout >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> bss size increased for uninitialized global variable g_i
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ vi mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ cat mem_layout.c
+#include <stdio.h>
+ 
+int g_i;
+
+int main(void)
+{
+    int i;
+    return 0;
+}
+anitha@anitha-All-Series ~/GIT/Programming $ gcc -o mem_layout mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ size mem_layout
+   text	   data	    bss	    dec	    hex	filename
+   1033	    276	      8	   1317	    525	mem_layout >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> no change in bss size for uninitialized local variable i
+anitha@anitha-All-Series ~/GIT/Programming $ vi mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ gcc -o mem_layout mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ size mem_layout
+   text	   data	    bss	    dec	    hex	filename
+   1033	    276	      8	   1317	    525	mem_layout
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ vi mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ cat mem_layout.c
+#include <stdio.h>
+ 
+int g_i;
+
+int main(void)
+{
+    int i = 10;
+    return 0;
+}
+anitha@anitha-All-Series ~/GIT/Programming $ gcc -o mem_layout mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ size mem_layout
+   text	   data	    bss	    dec	    hex	filename
+   1049	    276	      8	   1333	    535	mem_layout >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> no change in bss size for initialized local variable i, text size increases
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ 
+anitha@anitha-All-Series ~/GIT/Programming $ vi mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ cat mem_layout.c
+#include <stdio.h>
+ 
+int g_i = 100;
+
+int main(void)
+{
+    int i = 10;
+    return 0;
+}
+anitha@anitha-All-Series ~/GIT/Programming $ gcc -o mem_layout mem_layout.c
+anitha@anitha-All-Series ~/GIT/Programming $ size mem_layout
+   text	   data	    bss	    dec	    hex	filename
+   1049	    280	      4	   1333	    535	mem_layout >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> change in data size for initialized global variable g_i, bss size reduces by same amt, text size no change
+anitha@anitha-All-Series ~/GIT/Programming $ 
+

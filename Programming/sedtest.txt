@@ -1,0 +1,10 @@
+This is line #1
+This is line #2
+This is line #3
+This is line #4
+This is line #5
+#Next line is the 6th line, not this
+#Next line is the 6th line, not this
+	#	sed -i '\$ a CONFIG_PACKAGE_openssh-keygen=y' "$(SDIR)/.config"
+	#	sed -i '\$ a CONFIG_PACKAGE_openssh-moduli=y' "$(SDIR)/.config"
+	#	sed -i '\$ a CONFIG_PACKAGE_openssh-server=y' "$(SDIR)/.config"
